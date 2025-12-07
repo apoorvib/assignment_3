@@ -248,12 +248,14 @@ def collate_fn(batch):
     boxes = [item['boxes'] for item in batch]
     labels = [item['labels'] for item in batch]
     image_ids = [item['image_id'] for item in batch]
+    pair_info = [item['pair_info'] for item in batch]
     
     return {
         'images1': images1,
         'images2': images2,
         'boxes': boxes,
         'labels': labels,
-        'image_ids': image_ids
+        'image_ids': image_ids,
+        'pair_info': pair_info
     }
 
