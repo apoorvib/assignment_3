@@ -3,9 +3,31 @@ Basic test script to verify the implementation works.
 Tests data loading, model instantiation, and forward pass.
 """
 
-import torch
+import warnings
 import os
 import sys
+
+# Suppress all warnings
+warnings.filterwarnings('ignore')
+
+# Suppress specific warning categories
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=RuntimeWarning)
+
+# Suppress specific library warnings
+warnings.filterwarnings('ignore', module='transformers')
+warnings.filterwarnings('ignore', module='torch')
+warnings.filterwarnings('ignore', module='timm')
+
+# Suppress transformers warnings
+os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
+import torch
+# Suppress PyTorch warnings
+torch.set_warn_always(False)
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
