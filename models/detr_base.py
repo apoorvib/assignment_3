@@ -54,7 +54,8 @@ class DETRBase(nn.Module):
     
     def get_transformer(self):
         """Get the transformer from DETR."""
-        return self.detr.model.transformer
+        # HuggingFace DETR has encoder and decoder separately
+        return {'encoder': self.detr.model.encoder, 'decoder': self.detr.model.decoder}
     
     def get_classification_head(self):
         """Get the classification head from DETR."""

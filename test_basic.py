@@ -21,10 +21,10 @@ def test_imports():
     print("Testing imports...")
     try:
         from transformers import DetrForObjectDetection
-        print("✅ All imports successful")
+        print("[PASS] All imports successful")
         return True
     except ImportError as e:
-        print(f"❌ Import error: {e}")
+        print(f"[FAIL] Import error: {e}")
         return False
 
 
@@ -38,17 +38,17 @@ def test_model_instantiation():
         print("  Testing Option 2 (Pixel Diff)...")
         model2 = DETRPixelDiff(num_classes=6)
         model2 = model2.to(device)
-        print("  ✅ Option 2 model created successfully")
+        print("  [PASS] Option 2 model created successfully")
         
         # Test Option 1 (feature diff)
         print("  Testing Option 1 (Feature Diff)...")
         model1 = DETRFeatureDiff(num_classes=6, use_detr_backbone=False)
         model1 = model1.to(device)
-        print("  ✅ Option 1 model created successfully")
+        print("  [PASS] Option 1 model created successfully")
         
         return True
     except Exception as e:
-        print(f"  ❌ Model instantiation failed: {e}")
+        print(f"  [FAIL] Model instantiation failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -72,7 +72,7 @@ def test_forward_pass():
         with torch.no_grad():
             outputs2 = model2(dummy_img1, dummy_img2)
             assert hasattr(outputs2, 'logits') or 'logits' in outputs2
-            print("  ✅ Option 2 forward pass successful")
+            print("  [PASS] Option 2 forward pass successful")
         
         # Test Option 1
         print("  Testing Option 1 forward pass...")
@@ -81,11 +81,11 @@ def test_forward_pass():
         with torch.no_grad():
             outputs1 = model1(dummy_img1, dummy_img2)
             assert hasattr(outputs1, 'logits') or 'logits' in outputs1
-            print("  ✅ Option 1 forward pass successful")
+            print("  [PASS] Option 1 forward pass successful")
         
         return True
     except Exception as e:
-        print(f"  ❌ Forward pass failed: {e}")
+        print(f"  [FAIL] Forward pass failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -120,11 +120,11 @@ def test_loss_computation():
         model2.train()
         outputs2 = model2(dummy_img1, dummy_img2, labels=targets)
         assert hasattr(outputs2, 'loss') and outputs2.loss is not None
-        print(f"  ✅ Option 2 loss computation successful (loss: {outputs2.loss.item():.4f})")
+        print(f"  [PASS] Option 2 loss computation successful (loss: {outputs2.loss.item():.4f})")
         
         return True
     except Exception as e:
-        print(f"  ❌ Loss computation failed: {e}")
+        print(f"  [FAIL] Loss computation failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -137,13 +137,13 @@ def test_data_loader():
     # Check if matched annotations exist
     matched_dir = 'data/matched_annotations'
     if not os.path.exists(matched_dir):
-        print("  ⚠️  Matched annotations directory not found - skipping data loader test")
-        print("     Run: python data_ground_truth_labeller.py")
+        print("  [SKIP] Matched annotations directory not found - skipping data loader test")
+        print("         Run: python data_ground_truth_labeller.py")
         return True  # Not a failure, just missing data
     
     # Check if index file exists
     if not os.path.exists('index.txt'):
-        print("  ⚠️  index.txt not found - skipping data loader test")
+        print("  [SKIP] index.txt not found - skipping data loader test")
         return True
     
     try:
@@ -156,10 +156,10 @@ def test_data_loader():
         )
         
         if len(dataset) == 0:
-            print("  ⚠️  No valid data pairs found - run data_ground_truth_labeller.py first")
+            print("  [SKIP] No valid data pairs found - run data_ground_truth_labeller.py first")
             return True
         
-        print(f"  ✅ Dataset created successfully ({len(dataset)} samples)")
+        print(f"  [PASS] Dataset created successfully ({len(dataset)} samples)")
         
         # Test loading a sample
         sample = dataset[0]
@@ -167,18 +167,18 @@ def test_data_loader():
         assert 'image2' in sample
         assert 'boxes' in sample
         assert 'labels' in sample
-        print("  ✅ Sample loading successful")
+        print("  [PASS] Sample loading successful")
         
         # Test data loader
         loader = DataLoader(dataset, batch_size=1, collate_fn=collate_fn)
         batch = next(iter(loader))
         assert 'images1' in batch
         assert 'images2' in batch
-        print("  ✅ DataLoader works correctly")
+        print("  [PASS] DataLoader works correctly")
         
         return True
     except Exception as e:
-        print(f"  ❌ Data loader test failed: {e}")
+        print(f"  [FAIL] Data loader test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -206,7 +206,9 @@ def main():
             result = test_func()
             results.append((test_name, result))
         except Exception as e:
-            print(f"\n❌ {test_name} crashed: {e}")
+            print(f"\n[FAIL] {test_name} crashed: {e}")
+            import traceback
+            traceback.print_exc()
             results.append((test_name, False))
     
     # Summary
@@ -217,15 +219,15 @@ def main():
     total = len(results)
     
     for test_name, result in results:
-        status = "✅ PASS" if result else "❌ FAIL"
+        status = "[PASS]" if result else "[FAIL]"
         print(f"{test_name}: {status}")
     
     print(f"\nTotal: {passed}/{total} tests passed")
     
     if passed == total:
-        print("\n🎉 All tests passed! Implementation is ready for training.")
+        print("\n[SUCCESS] All tests passed! Implementation is ready for training.")
     else:
-        print("\n⚠️  Some tests failed. Please fix issues before training.")
+        print("\n[WARNING] Some tests failed. Please fix issues before training.")
     
     return passed == total
 

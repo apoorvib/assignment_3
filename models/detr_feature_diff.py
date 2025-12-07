@@ -82,8 +82,10 @@ class DETRFeatureDiff(nn.Module):
             else:
                 raise ValueError(f"Unknown layer: {layer}")
         
-        # Get transformer from DETR
-        self.transformer = self.detr.model.transformer
+        # Get transformer encoder and decoder from DETR
+        # HuggingFace DETR has encoder and decoder separately
+        self.encoder = self.detr.model.encoder
+        self.decoder = self.detr.model.decoder
         
         # Get position embeddings (needed for transformer)
         self.position_embeddings = self.detr.model.position_embeddings
@@ -187,21 +189,27 @@ class DETRFeatureDiff(nn.Module):
         query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0)
         query_position_embeddings = query_position_embeddings.expand(batch_size, -1, -1)
         
-        # Pass through transformer
-        # Transformer expects: inputs_embeds, attention_mask, query_position_embeddings
-        transformer_outputs = self.transformer(
+        # Pass through transformer encoder first
+        encoder_outputs = self.encoder(
             inputs_embeds=feat_diff_flat,
-            attention_mask=pixel_mask,
+            attention_mask=pixel_mask
+        )
+        encoder_hidden_states = encoder_outputs.last_hidden_state
+        
+        # Prepare object queries (learnable embeddings)
+        num_queries = self.query_position_embeddings.weight.shape[0]
+        object_queries = self.query_position_embeddings.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        
+        # Pass through transformer decoder
+        decoder_outputs = self.decoder(
+            inputs_embeds=object_queries,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=pixel_mask,
             query_position_embeddings=query_position_embeddings
         )
         
-        # Get hidden states
-        hidden_states = transformer_outputs.last_hidden_state
-        
-        # Split into object queries and image features
-        # DETR uses first N queries for objects, rest for image features
-        num_queries = self.query_position_embeddings.weight.shape[0]
-        object_queries = hidden_states[:, :num_queries, :]
+        # Get decoder hidden states (these are the object queries after processing)
+        object_queries = decoder_outputs.last_hidden_state
         
         # Classification and bbox prediction
         logits = self.class_labels_classifier(object_queries)
