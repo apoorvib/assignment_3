@@ -64,6 +64,28 @@ class Trainer:
         self.output_dir = config.get('output_dir', 'outputs')
         os.makedirs(self.output_dir, exist_ok=True)
     
+    def format_targets_for_detr(self, targets):
+        """
+        Format targets for HuggingFace DETR.
+        
+        Args:
+            targets: Dict with 'boxes' and 'labels' lists
+            
+        Returns:
+            List of target dicts in DETR format
+        """
+        detr_targets = []
+        for boxes, labels in zip(targets['boxes'], targets['labels']):
+            # HuggingFace DETR expects:
+            # - boxes: tensor [N, 4] with [x_center, y_center, width, height] normalized
+            # - class_labels: tensor [N] with class indices
+            target_dict = {
+                'boxes': boxes.to(self.device),
+                'class_labels': labels.to(self.device)
+            }
+            detr_targets.append(target_dict)
+        return detr_targets
+    
     def compute_loss(self, outputs, targets):
         """
         Compute DETR loss.
@@ -75,26 +97,16 @@ class Trainer:
         Returns:
             Loss dictionary
         """
-        # DETR uses bipartite matching loss
-        # We need to format targets properly for DETR
-        
-        # Convert targets to DETR format
-        detr_targets = []
-        for i, (boxes, labels) in enumerate(zip(targets['boxes'], targets['labels'])):
-            target_dict = {
-                'boxes': boxes.to(self.device),
-                'class_labels': labels.to(self.device)
+        # If outputs already have loss (from HuggingFace DETR), use it
+        if hasattr(outputs, 'loss') and outputs.loss is not None:
+            return {
+                'loss': outputs.loss,
+                'loss_class_error': getattr(outputs, 'loss_dict', {}).get('loss_class_error', torch.tensor(0.0))
             }
-            detr_targets.append(target_dict)
         
-        # If model has compute_loss method, use it
-        if hasattr(self.model, 'detr') and hasattr(self.model.detr, 'compute_loss'):
-            loss_dict = self.model.detr.compute_loss(outputs, detr_targets)
-        else:
-            # Manual loss computation
-            # This is a simplified version - DETR's actual loss is more complex
-            loss_dict = self._compute_simple_loss(outputs, detr_targets)
-        
+        # Otherwise, compute loss manually (for Option 1 or if labels weren't passed)
+        detr_targets = self.format_targets_for_detr(targets)
+        loss_dict = self._compute_simple_loss(outputs, detr_targets)
         return loss_dict
     
     def _compute_simple_loss(self, outputs, targets):
@@ -204,9 +216,20 @@ class Trainer:
                 'labels': batch['labels']
             }
             
-            # Forward pass
+            # Forward pass with labels for loss computation
             self.optimizer.zero_grad()
-            outputs = self.model(images1, images2)
+            
+            # Format targets for DETR
+            detr_targets = self.format_targets_for_detr(targets)
+            
+            # For Option 2 (pixel diff), pass labels to get built-in loss
+            # For Option 1 (feature diff), we'll compute loss manually
+            if hasattr(self.model, 'detr') and hasattr(self.model, 'compute_diff'):
+                # This is Option 2 - can use built-in loss by passing labels
+                outputs = self.model(images1, images2, labels=detr_targets)
+            else:
+                # This is Option 1 - forward without labels, compute loss manually
+                outputs = self.model(images1, images2)
             
             # Compute loss
             loss_dict = self.compute_loss(outputs, targets)
@@ -246,7 +269,7 @@ class Trainer:
                     'labels': batch['labels']
                 }
                 
-                # Forward pass
+                # Forward pass (validation - no labels needed)
                 outputs = self.model(images1, images2)
                 
                 # Compute loss

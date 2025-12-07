@@ -73,7 +73,7 @@ class DETRPixelDiff(DETRBase):
         else:
             raise ValueError(f"Unknown diff_mode: {self.diff_mode}")
     
-    def forward(self, image1, image2, pixel_mask=None):
+    def forward(self, image1, image2, pixel_mask=None, labels=None):
         """
         Forward pass.
         
@@ -81,14 +81,18 @@ class DETRPixelDiff(DETRBase):
             image1: First frame [batch, channels, height, width]
             image2: Second frame [batch, channels, height, width]
             pixel_mask: Optional attention mask
+            labels: Optional target labels for loss computation (list of dicts)
             
         Returns:
-            DETR outputs
+            DETR outputs (with loss if labels provided)
         """
         # Compute pixel difference
         img_diff = self.compute_diff(image1, image2)
         
-        # Feed to DETR
-        outputs = super().forward(img_diff, pixel_mask)
+        # Feed to DETR with labels if provided (for loss computation)
+        if labels is not None:
+            outputs = self.detr(pixel_values=img_diff, pixel_mask=pixel_mask, labels=labels)
+        else:
+            outputs = self.detr(pixel_values=img_diff, pixel_mask=pixel_mask)
         return outputs
 

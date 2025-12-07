@@ -30,18 +30,22 @@ class DETRBase(nn.Module):
         self.num_classes = num_classes
         self.processor = DetrImageProcessor.from_pretrained(pretrained_model)
     
-    def forward(self, pixel_values, pixel_mask=None):
+    def forward(self, pixel_values, pixel_mask=None, labels=None):
         """
         Forward pass through DETR.
         
         Args:
             pixel_values: Preprocessed image tensor [batch, channels, height, width]
             pixel_mask: Optional attention mask
+            labels: Optional target labels for loss computation (list of dicts)
             
         Returns:
-            DETR outputs with logits and pred_boxes
+            DETR outputs with logits and pred_boxes (and loss if labels provided)
         """
-        outputs = self.detr(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        if labels is not None:
+            outputs = self.detr(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+        else:
+            outputs = self.detr(pixel_values=pixel_values, pixel_mask=pixel_mask)
         return outputs
     
     def get_backbone(self):

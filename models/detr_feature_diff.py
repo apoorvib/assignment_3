@@ -152,7 +152,7 @@ class DETRFeatureDiff(nn.Module):
         features = self.feature_proj(features)
         return features
     
-    def forward(self, image1, image2, pixel_mask=None):
+    def forward(self, image1, image2, pixel_mask=None, labels=None):
         """
         Forward pass.
         
