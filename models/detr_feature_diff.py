@@ -7,6 +7,7 @@ computes the difference, and feeds it to the transformer block only.
 
 import torch
 import torch.nn as nn
+import math
 from transformers import DetrForObjectDetection, DetrImageProcessor
 import torchvision.models as models
 
@@ -87,15 +88,48 @@ class DETRFeatureDiff(nn.Module):
         self.encoder = self.detr.model.encoder
         self.decoder = self.detr.model.decoder
         
-        # Get position embeddings (needed for transformer)
-        self.position_embeddings = self.detr.model.position_embeddings
+        # Position embeddings are handled internally by the encoder in HuggingFace DETR
+        # We'll create sinusoidal position embeddings ourselves when needed
+        self.position_embeddings = None
         
         # Get classification and bbox heads
         self.class_labels_classifier = self.detr.class_labels_classifier
         self.bbox_predictor = self.detr.bbox_predictor
         
-        # Get object queries
-        self.query_position_embeddings = self.detr.model.query_position_embeddings
+        # Get object queries and query position embeddings
+        # In HuggingFace DETR, these are typically accessed from the model
+        # Try different possible locations
+        self.query_position_embeddings = None
+        self.object_queries = None
+        
+        # Try to find query position embeddings
+        if hasattr(self.detr.model, 'query_position_embeddings'):
+            self.query_position_embeddings = self.detr.model.query_position_embeddings
+        elif hasattr(self.decoder, 'query_position_embeddings'):
+            self.query_position_embeddings = self.decoder.query_position_embeddings
+        elif hasattr(self.decoder, 'embed_positions'):
+            self.query_position_embeddings = self.decoder.embed_positions
+        
+        # Try to find object queries (learnable query embeddings)
+        if hasattr(self.detr.model, 'query_embeddings'):
+            self.object_queries = self.detr.model.query_embeddings
+        elif hasattr(self.decoder, 'query_embeddings'):
+            self.object_queries = self.decoder.query_embeddings
+        
+        # If we can't find them, we'll need to create them or use decoder's default
+        if self.query_position_embeddings is None or self.object_queries is None:
+            # Get config to determine number of queries
+            config = self.detr.config
+            num_queries = getattr(config, 'num_queries', 100)
+            hidden_dim = getattr(config, 'd_model', 256)
+            
+            # Create learnable object queries if not found
+            if self.object_queries is None:
+                self.object_queries = nn.Parameter(torch.randn(num_queries, hidden_dim))
+            
+            # Create learnable query position embeddings if not found
+            if self.query_position_embeddings is None:
+                self.query_position_embeddings = nn.Parameter(torch.randn(num_queries, hidden_dim))
         
         # Projection layer to match DETR's expected input dimension
         # DETR expects 256-dim features, ResNet outputs 1024 or 2048
@@ -107,6 +141,27 @@ class DETRFeatureDiff(nn.Module):
         else:
             # DETR backbone already outputs correct dimension
             self.feature_proj = nn.Identity()
+    
+    def _create_sine_position_embeddings(self, num_positions, hidden_dim):
+        """
+        Create sinusoidal position embeddings similar to DETR.
+        
+        Args:
+            num_positions: Number of positions (height * width)
+            hidden_dim: Hidden dimension (should be 256 for DETR)
+            
+        Returns:
+            Position embeddings tensor [num_positions, hidden_dim]
+        """
+        position = torch.arange(num_positions, dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, hidden_dim, 2, dtype=torch.float32) * 
+                            (-math.log(10000.0) / hidden_dim))
+        
+        pos_embedding = torch.zeros(num_positions, hidden_dim)
+        pos_embedding[:, 0::2] = torch.sin(position * div_term)
+        pos_embedding[:, 1::2] = torch.cos(position * div_term)
+        
+        return pos_embedding
     
     def _setup_hooks(self):
         """Setup forward hooks to extract features from DETR's backbone."""
@@ -182,12 +237,28 @@ class DETRFeatureDiff(nn.Module):
         feat_diff_flat = feat_diff.flatten(2).transpose(1, 2)  # [batch, h*w, channels]
         
         # Add position embeddings
-        position_embeddings = self.position_embeddings(feat_diff_flat)
-        feat_diff_flat = feat_diff_flat + position_embeddings
+        if self.position_embeddings is not None:
+            # Try to use existing position embeddings
+            if callable(self.position_embeddings):
+                position_embeddings = self.position_embeddings(feat_diff_flat)
+            else:
+                # If it's a tensor or module, try to use it directly
+                if hasattr(self.position_embeddings, 'weight'):
+                    # It's an embedding layer
+                    seq_len = feat_diff_flat.shape[1]
+                    position_embeddings = self.position_embeddings.weight[:seq_len].unsqueeze(0)
+                    position_embeddings = position_embeddings.expand(batch_size, -1, -1)
+                else:
+                    position_embeddings = self.position_embeddings
+        else:
+            # Create sinusoidal position embeddings
+            seq_len = feat_diff_flat.shape[1]
+            hidden_dim = feat_diff_flat.shape[2]
+            pos_emb = self._create_sine_position_embeddings(seq_len, hidden_dim)
+            position_embeddings = pos_emb.unsqueeze(0).to(feat_diff_flat.device)
+            position_embeddings = position_embeddings.expand(batch_size, -1, -1)
         
-        # Prepare object queries
-        query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0)
-        query_position_embeddings = query_position_embeddings.expand(batch_size, -1, -1)
+        feat_diff_flat = feat_diff_flat + position_embeddings
         
         # Pass through transformer encoder first
         encoder_outputs = self.encoder(
@@ -196,9 +267,21 @@ class DETRFeatureDiff(nn.Module):
         )
         encoder_hidden_states = encoder_outputs.last_hidden_state
         
-        # Prepare object queries (learnable embeddings)
-        num_queries = self.query_position_embeddings.weight.shape[0]
-        object_queries = self.query_position_embeddings.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        # Prepare object queries and query position embeddings
+        # Handle different types of embeddings (Parameter, embedding layer, etc.)
+        if isinstance(self.object_queries, nn.Parameter):
+            object_queries = self.object_queries.unsqueeze(0).expand(batch_size, -1, -1)
+        elif hasattr(self.object_queries, 'weight'):
+            object_queries = self.object_queries.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        else:
+            object_queries = self.object_queries.unsqueeze(0).expand(batch_size, -1, -1)
+        
+        if isinstance(self.query_position_embeddings, nn.Parameter):
+            query_position_embeddings = self.query_position_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
+        elif hasattr(self.query_position_embeddings, 'weight'):
+            query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).expand(batch_size, -1, -1)
+        else:
+            query_position_embeddings = self.query_position_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
         
         # Pass through transformer decoder
         decoder_outputs = self.decoder(
