@@ -236,34 +236,22 @@ class DETRFeatureDiff(nn.Module):
         # Flatten spatial dimensions
         feat_diff_flat = feat_diff.flatten(2).transpose(1, 2)  # [batch, h*w, channels]
         
-        # Add position embeddings
-        if self.position_embeddings is not None:
-            # Try to use existing position embeddings
-            if callable(self.position_embeddings):
-                position_embeddings = self.position_embeddings(feat_diff_flat)
-            else:
-                # If it's a tensor or module, try to use it directly
-                if hasattr(self.position_embeddings, 'weight'):
-                    # It's an embedding layer
-                    seq_len = feat_diff_flat.shape[1]
-                    position_embeddings = self.position_embeddings.weight[:seq_len].unsqueeze(0)
-                    position_embeddings = position_embeddings.expand(batch_size, -1, -1)
-                else:
-                    position_embeddings = self.position_embeddings
-        else:
-            # Create sinusoidal position embeddings
-            seq_len = feat_diff_flat.shape[1]
-            hidden_dim = feat_diff_flat.shape[2]
-            pos_emb = self._create_sine_position_embeddings(seq_len, hidden_dim)
-            position_embeddings = pos_emb.unsqueeze(0).to(feat_diff_flat.device)
-            position_embeddings = position_embeddings.expand(batch_size, -1, -1)
+        # Create sinusoidal position embeddings
+        seq_len = feat_diff_flat.shape[1]
+        hidden_dim = feat_diff_flat.shape[2]
+        pos_emb = self._create_sine_position_embeddings(seq_len, hidden_dim)
+        position_embeddings = pos_emb.unsqueeze(0).to(feat_diff_flat.device)
+        position_embeddings = position_embeddings.expand(batch_size, -1, -1)
         
-        feat_diff_flat = feat_diff_flat + position_embeddings
-        
-        # Pass through transformer encoder first
+        # Pass through transformer encoder
+        # DetrEncoder expects inputs_embeds and object_queries (for position embeddings)
         encoder_outputs = self.encoder(
             inputs_embeds=feat_diff_flat,
-            attention_mask=pixel_mask
+            object_queries=position_embeddings,
+            attention_mask=pixel_mask,
+            output_attentions=False,
+            output_hidden_states=False,
+            return_dict=True
         )
         encoder_hidden_states = encoder_outputs.last_hidden_state
         
@@ -284,10 +272,12 @@ class DETRFeatureDiff(nn.Module):
             query_position_embeddings = self.query_position_embeddings.unsqueeze(0).expand(batch_size, -1, -1)
         
         # Pass through transformer decoder
+        # Note: object_queries parameter in decoder is for encoder position embeddings
         decoder_outputs = self.decoder(
             inputs_embeds=object_queries,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=pixel_mask,
+            object_queries=position_embeddings,  # Position embeddings for encoder outputs
             query_position_embeddings=query_position_embeddings
         )
         

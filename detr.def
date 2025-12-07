@@ -1,0 +1,41 @@
+Bootstrap: docker
+From: pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
+
+%post
+    # Update and install basic tools
+    apt-get update && apt-get install -y \
+        git \
+        wget \
+        vim \
+        && rm -rf /var/lib/apt/lists/*
+    
+    # Install Python dependencies
+    pip install --no-cache-dir \
+        transformers \
+        torchvision \
+        Pillow \
+        numpy \
+        scipy \
+        matplotlib \
+        tqdm \
+        tensorboard \
+        pycocotools
+    
+    # Clean up
+    apt-get clean
+
+%environment
+    export PYTHONUNBUFFERED=1
+    export CUDA_VISIBLE_DEVICES=0
+
+%runscript
+    exec python "$@"
+
+%help
+    This container provides PyTorch with CUDA support for DETR training.
+    
+    Usage:
+        singularity exec --nv detr.sif python train.py [args]
+    
+    Or with GPU:
+        singularity exec --nv detr.sif python train.py --architecture 2 --num_epochs 50
