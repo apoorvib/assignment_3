@@ -1,0 +1,18 @@
+{
+  "data_dir": ".",
+  "index_file": "index.txt",
+  "matched_annotations_dir": "data/matched_annotations",
+  "architecture": 2,
+  "num_classes": 6,
+  "pretrained_model": "facebook/detr-resnet-50",
+  "finetune_strategy": "classification_head_only",
+  "batch_size": 4,
+  "num_epochs": 50,
+  "learning_rate": 1e-4,
+  "weight_decay": 1e-4,
+  "image_size": 800,
+  "output_dir": "outputs/exp2_option2_classification_head",
+  "seed": 42,
+  "save_every": 10
+}
+
