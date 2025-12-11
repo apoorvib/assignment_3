@@ -94,7 +94,17 @@ def postprocess_predictions(outputs, score_threshold=0.5, num_classes=6):
     probs = torch.softmax(logits, dim=-1)  # [batch, num_queries, num_classes+1]
     
     # Get scores and labels (excluding background class)
-    scores, labels = torch.max(probs[:, :, :num_classes], dim=-1)  # [batch, num_queries]
+    # Background class is at index num_classes
+    # We compare object class probabilities against background
+    object_probs = probs[:, :, :num_classes]  # [batch, num_queries, num_classes]
+    background_prob = probs[:, :, num_classes:num_classes+1]  # [batch, num_queries, 1]
+    
+    # Get max object class probability and label
+    max_object_probs, labels = torch.max(object_probs, dim=-1)  # [batch, num_queries]
+    
+    # Score: probability that it's an object (not background)
+    # Use the object probability directly, or compare against background
+    scores = max_object_probs  # Simple: use max object class probability
     
     # Filter by score threshold
     batch_boxes = []
