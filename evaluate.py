@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 import json
 import os
 import numpy as np
+from torchvision.ops import nms
 
 from dataloader import MovedObjectDataset, collate_fn
 from models import DETRPixelDiff, DETRFeatureDiff
@@ -42,6 +43,7 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
     parser.add_argument('--iou_threshold', type=float, default=0.5, help='IoU threshold for matching')
     parser.add_argument('--score_threshold', type=float, default=0.5, help='Score threshold for predictions')
+    parser.add_argument('--nms_threshold', type=float, default=0.5, help='IoU threshold for NMS (None to disable)')
     parser.add_argument('--num_visualizations', type=int, default=10, help='Number of samples to visualize')
     parser.add_argument('--output_dir', type=str, default='eval_outputs', help='Output directory')
     
@@ -71,7 +73,7 @@ def create_model(architecture, num_classes, pretrained_model, **kwargs):
     return model
 
 
-def postprocess_predictions(outputs, score_threshold=0.5, num_classes=6):
+def postprocess_predictions(outputs, score_threshold=0.5, num_classes=6, nms_threshold=0.5):
     """
     Postprocess DETR outputs to get boxes, labels, and scores.
     
@@ -79,6 +81,7 @@ def postprocess_predictions(outputs, score_threshold=0.5, num_classes=6):
         outputs: Model outputs
         score_threshold: Score threshold for filtering
         num_classes: Number of classes
+        nms_threshold: IoU threshold for NMS (None to disable)
         
     Returns:
         boxes, labels, scores
@@ -102,20 +105,67 @@ def postprocess_predictions(outputs, score_threshold=0.5, num_classes=6):
     # Get max object class probability and label
     max_object_probs, labels = torch.max(object_probs, dim=-1)  # [batch, num_queries]
     
-    # Score: probability that it's an object (not background)
-    # Use the object probability directly, or compare against background
-    scores = max_object_probs  # Simple: use max object class probability
+    # Score: Better way to distinguish objects from background
+    # Compare object probability against background probability
+    # This gives higher scores when object prob >> background prob
+    background_probs = background_prob.squeeze(-1)  # [batch, num_queries]
+    # Use ratio: object_prob / (object_prob + background_prob)
+    # This is essentially the probability it's an object given softmax
+    # Alternative: use logit difference or confidence ratio
+    scores = max_object_probs / (max_object_probs + background_probs + 1e-8)
     
-    # Filter by score threshold
+    # Alternative scoring: use the raw object probability (what we had before)
+    # scores = max_object_probs
+    
+    # Filter by score threshold and apply NMS
     batch_boxes = []
     batch_labels = []
     batch_scores = []
     
     for b in range(logits.shape[0]):
         mask = scores[b] >= score_threshold
-        batch_boxes.append(pred_boxes[b][mask])
-        batch_labels.append(labels[b][mask])
-        batch_scores.append(scores[b][mask])
+        boxes = pred_boxes[b][mask]
+        labels_batch = labels[b][mask]
+        scores_batch = scores[b][mask]
+        
+        # Apply NMS per class to reduce duplicate detections
+        if nms_threshold is not None and len(boxes) > 0:
+            # Convert boxes from center_x, center_y, width, height to x1, y1, x2, y2
+            boxes_xyxy = torch.zeros_like(boxes)
+            boxes_xyxy[:, 0] = boxes[:, 0] - boxes[:, 2] / 2  # x1
+            boxes_xyxy[:, 1] = boxes[:, 1] - boxes[:, 3] / 2  # y1
+            boxes_xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2  # x2
+            boxes_xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2  # y2
+            
+            # Apply NMS per class
+            keep_indices = []
+            for class_id in range(num_classes):
+                class_mask = labels_batch == class_id
+                if class_mask.sum() == 0:
+                    continue
+                
+                class_boxes = boxes_xyxy[class_mask]
+                class_scores = scores_batch[class_mask]
+                
+                if len(class_boxes) > 0:
+                    keep = nms(class_boxes, class_scores, nms_threshold)
+                    # Map back to original indices
+                    class_indices = torch.where(class_mask)[0]
+                    keep_indices.extend(class_indices[keep].tolist())
+            
+            if keep_indices:
+                keep_indices = torch.tensor(keep_indices, device=boxes.device)
+                boxes = boxes[keep_indices]
+                labels_batch = labels_batch[keep_indices]
+                scores_batch = scores_batch[keep_indices]
+            else:
+                boxes = torch.empty((0, 4), device=boxes.device)
+                labels_batch = torch.empty((0,), device=labels_batch.device, dtype=torch.long)
+                scores_batch = torch.empty((0,), device=scores_batch.device)
+        
+        batch_boxes.append(boxes)
+        batch_labels.append(labels_batch)
+        batch_scores.append(scores_batch)
     
     return batch_boxes, batch_labels, batch_scores
 
@@ -203,7 +253,7 @@ def main():
             
             # Postprocess
             pred_boxes, pred_labels, pred_scores = postprocess_predictions(
-                outputs, args.score_threshold, args.num_classes
+                outputs, args.score_threshold, args.num_classes, args.nms_threshold
             )
             
             # Count predictions after threshold
