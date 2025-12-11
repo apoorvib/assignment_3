@@ -166,6 +166,9 @@ def main():
     all_target_labels = []
     
     visualization_count = 0
+    total_predictions_before_threshold = 0
+    total_predictions_after_threshold = 0
+    max_scores_seen = []
     
     with torch.no_grad():
         for batch_idx, batch in enumerate(test_loader):
@@ -179,10 +182,23 @@ def main():
             # Forward pass
             outputs = model(images1, images2)
             
+            # Diagnostic: Check raw predictions before thresholding
+            if hasattr(outputs, 'logits'):
+                logits = outputs.logits
+                probs = torch.softmax(logits, dim=-1)
+                # Get max scores (excluding background)
+                max_scores = torch.max(probs[:, :, :args.num_classes], dim=-1)[0]
+                max_scores_seen.extend(max_scores.cpu().numpy().flatten().tolist())
+                total_predictions_before_threshold += (max_scores > 0.1).sum().item()  # Count predictions > 10%
+            
             # Postprocess
             pred_boxes, pred_labels, pred_scores = postprocess_predictions(
                 outputs, args.score_threshold, args.num_classes
             )
+            
+            # Count predictions after threshold
+            for pred in pred_boxes:
+                total_predictions_after_threshold += len(pred)
             
             # Collect predictions and targets
             for i in range(len(pred_boxes)):
@@ -213,6 +229,22 @@ def main():
                         show=False
                     )
                     visualization_count += 1
+    
+    # Print diagnostics
+    print("\n" + "="*60)
+    print("DIAGNOSTICS")
+    print("="*60)
+    if max_scores_seen:
+        print(f"Max prediction scores seen: min={min(max_scores_seen):.4f}, max={max(max_scores_seen):.4f}, mean={sum(max_scores_seen)/len(max_scores_seen):.4f}")
+        print(f"Predictions with score > 0.1: {total_predictions_before_threshold}")
+        print(f"Predictions with score > {args.score_threshold}: {total_predictions_after_threshold}")
+        print(f"Score threshold used: {args.score_threshold}")
+        if total_predictions_after_threshold == 0 and total_predictions_before_threshold > 0:
+            print(f"\n⚠️  WARNING: Model is making predictions but all scores are below threshold {args.score_threshold}")
+            print(f"   Try lowering --score_threshold (e.g., --score_threshold 0.1)")
+    else:
+        print("No predictions detected - model may not be working correctly")
+    print("="*60)
     
     # Compute metrics
     print("\nComputing metrics...")
