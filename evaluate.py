@@ -245,8 +245,28 @@ def main():
     
     # Save results
     results_file = os.path.join(args.output_dir, 'results.json')
+    
+    # Convert numpy types to Python native types for JSON serialization
+    def convert_to_native(obj):
+        """Recursively convert numpy types to Python native types."""
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {str(k) if isinstance(k, (np.integer, np.int64, np.int32)) else k: convert_to_native(v) 
+                    for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_to_native(item) for item in obj]
+        else:
+            return obj
+    
+    metrics_serializable = convert_to_native(metrics)
+    
     with open(results_file, 'w') as f:
-        json.dump(metrics, f, indent=2, default=str)
+        json.dump(metrics_serializable, f, indent=2, default=str)
     
     print(f"\nResults saved to {results_file}")
     print(f"Visualizations saved to {os.path.join(args.output_dir, 'visualizations')}")
