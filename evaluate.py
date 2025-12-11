@@ -57,7 +57,9 @@ def create_model(architecture, num_classes, pretrained_model, **kwargs):
         model = DETRPixelDiff(
             num_classes=num_classes,
             pretrained_model=pretrained_model,
-            diff_mode=kwargs.get('diff_mode', 'subtract')
+            diff_mode=kwargs.get('diff_mode', 'subtract'),
+            diff_amplify=kwargs.get('diff_amplify', 1.0),
+            eos_coef=kwargs.get('eos_coef', 0.01)
         )
     else:
         raise ValueError(f"Unknown architecture: {architecture}")

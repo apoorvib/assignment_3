@@ -20,7 +20,7 @@ class DETRPixelDiff(DETRBase):
     """
     
     def __init__(self, num_classes=6, pretrained_model='facebook/detr-resnet-50', 
-                 diff_mode='subtract'):
+                 diff_mode='subtract', diff_amplify=1.0, eos_coef=0.01):
         """
         Args:
             num_classes: Number of object classes
@@ -29,9 +29,12 @@ class DETRPixelDiff(DETRBase):
                 - 'subtract': img2 - img1
                 - 'abs': |img2 - img1|
                 - 'concat': Concatenate along channel dimension
+            diff_amplify: Multiplier for pixel difference (default: 1.0, try 5.0 to amplify signal)
+            eos_coef: Background class weight in loss (default: 0.01, lower = less background bias)
         """
-        super().__init__(num_classes, pretrained_model)
+        super().__init__(num_classes, pretrained_model, eos_coef=eos_coef)
         self.diff_mode = diff_mode
+        self.diff_amplify = diff_amplify
         
         # If using concat, need to adjust input channels
         if diff_mode == 'concat':
@@ -80,13 +83,16 @@ class DETRPixelDiff(DETRBase):
             )
         
         if self.diff_mode == 'subtract':
-            return img2 - img1
+            diff = img2 - img1
         elif self.diff_mode == 'abs':
-            return torch.abs(img2 - img1)
+            diff = torch.abs(img2 - img1)
         elif self.diff_mode == 'concat':
             return torch.cat([img1, img2], dim=1)
         else:
             raise ValueError(f"Unknown diff_mode: {self.diff_mode}")
+        
+        # Amplify the difference signal
+        return diff * self.diff_amplify
     
     def forward(self, image1, image2, pixel_mask=None, labels=None):
         """

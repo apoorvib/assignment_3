@@ -330,5 +330,16 @@ class Trainer:
         with open(os.path.join(self.output_dir, 'history.json'), 'w') as f:
             json.dump(self.history, f, indent=2)
         
-        print(f"\nTraining completed. Best validation loss: {self.best_val_loss:.4f}")
+        # Print final summary
+        print("\n" + "="*60)
+        print("TRAINING SUMMARY")
+        print("="*60)
+        print(f"Total epochs: {num_epochs}")
+        print(f"Best validation loss: {self.best_val_loss:.4f}")
+        print(f"Final train loss: {self.history['train_loss'][-1]:.4f}")
+        print(f"Final val loss: {self.history['val_loss'][-1]:.4f}")
+        print(f"\nBest model saved to: {os.path.join(self.output_dir, 'best_model.pth')}")
+        print(f"Final model saved to: {os.path.join(self.output_dir, 'final_model.pth')}")
+        print(f"Training history saved to: {os.path.join(self.output_dir, 'history.json')}")
+        print("="*60)
 

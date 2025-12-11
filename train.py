@@ -32,6 +32,10 @@ def parse_args():
     parser.add_argument('--num_classes', type=int, default=6, help='Number of object classes')
     parser.add_argument('--pretrained_model', type=str, default='facebook/detr-resnet-50',
                        help='Pretrained DETR model')
+    parser.add_argument('--diff_amplify', type=float, default=1.0,
+                       help='Multiplier for pixel difference (default: 1.0, try 5.0 to amplify signal)')
+    parser.add_argument('--eos_coef', type=float, default=0.01,
+                       help='Background class weight in loss (default: 0.01, lower = less background bias)')
     
     # Training arguments
     parser.add_argument('--finetune_strategy', type=str, default='full',
@@ -163,7 +167,9 @@ def main():
     model = create_model(
         architecture=config['architecture'],
         num_classes=config['num_classes'],
-        pretrained_model=config['pretrained_model']
+        pretrained_model=config['pretrained_model'],
+        diff_amplify=config.get('diff_amplify', 1.0),
+        eos_coef=config.get('eos_coef', 0.01)
     )
     
     # Apply fine-tuning strategy

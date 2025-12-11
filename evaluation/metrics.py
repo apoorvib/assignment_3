@@ -175,19 +175,21 @@ def compute_precision_recall(pred_boxes_list, pred_labels_list, pred_scores_list
     
     per_class_metrics = {}
     for label in set(list(per_class_tp.keys()) + list(per_class_fp.keys()) + list(per_class_fn.keys())):
-        tp = per_class_tp[label]
-        fp = per_class_fp[label]
-        fn = per_class_fn[label]
+        # Convert numpy types to Python native types for JSON serialization
+        label_int = int(label) if isinstance(label, (np.integer, np.int64, np.int32)) else label
+        tp = int(per_class_tp[label]) if isinstance(per_class_tp[label], (np.integer, np.int64, np.int32)) else per_class_tp[label]
+        fp = int(per_class_fp[label]) if isinstance(per_class_fp[label], (np.integer, np.int64, np.int32)) else per_class_fp[label]
+        fn = int(per_class_fn[label]) if isinstance(per_class_fn[label], (np.integer, np.int64, np.int32)) else per_class_fn[label]
         
-        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        prec = float(tp / (tp + fp)) if (tp + fp) > 0 else 0.0
+        rec = float(tp / (tp + fn)) if (tp + fn) > 0 else 0.0
         
-        per_class_metrics[label] = {
-            'precision': prec,
-            'recall': rec,
-            'tp': tp,
-            'fp': fp,
-            'fn': fn
+        per_class_metrics[label_int] = {
+            'precision': float(prec),
+            'recall': float(rec),
+            'tp': int(tp),
+            'fp': int(fp),
+            'fn': int(fn)
         }
     
     return precision, recall, per_class_metrics
@@ -247,6 +249,8 @@ def compute_map(pred_boxes_list, pred_labels_list, pred_scores_list,
     # Compute AP for each class
     ap_per_class = {}
     for label in set(list(class_predictions.keys()) + list(class_targets.keys())):
+        # Convert numpy types to Python native types for JSON serialization
+        label_int = int(label) if isinstance(label, (np.integer, np.int64, np.int32)) else label
         # Collect all predictions and targets for this class
         all_pred_boxes = []
         all_pred_scores = []
@@ -260,7 +264,7 @@ def compute_map(pred_boxes_list, pred_labels_list, pred_scores_list,
             all_target_boxes.extend(target_dict['boxes'])
         
         if len(all_pred_boxes) == 0:
-            ap_per_class[label] = 0.0
+            ap_per_class[label_int] = 0.0
             continue
         
         # Sort by score
@@ -307,7 +311,7 @@ def compute_map(pred_boxes_list, pred_labels_list, pred_scores_list,
             if np.any(mask):
                 ap += np.max(precision[mask]) / 11.0
         
-        ap_per_class[label] = ap
+        ap_per_class[label_int] = float(ap)
     
     # Compute mAP
     if len(ap_per_class) > 0:
@@ -337,10 +341,10 @@ def compute_metrics(pred_boxes_list, pred_labels_list, pred_scores_list,
     )
     
     return {
-        'precision': precision,
-        'recall': recall,
-        'mAP': map_value,
-        'f1_score': 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0,
+        'precision': float(precision),
+        'recall': float(recall),
+        'mAP': float(map_value),
+        'f1_score': float(2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0),
         'per_class_precision_recall': per_class_pr,
         'per_class_AP': ap_per_class
     }
