@@ -43,9 +43,11 @@ def parse_args():
                        help='Fine-tuning strategy')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
     parser.add_argument('--num_epochs', type=int, default=50, help='Number of epochs')
-    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate (recommended: 1e-4 to 5e-5 for DETR)')
     parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay')
     parser.add_argument('--image_size', type=int, default=800, help='Input image size')
+    parser.add_argument('--max_grad_norm', type=float, default=0.1, help='Max gradient norm for clipping')
+    parser.add_argument('--lr_scheduler', type=str, default='step', choices=['step', 'cosine'], help='LR scheduler type')
     
     # Other arguments
     parser.add_argument('--output_dir', type=str, default='outputs', help='Output directory')
@@ -190,8 +192,11 @@ def main():
     trainer_config = {
         'learning_rate': config['learning_rate'],
         'weight_decay': config['weight_decay'],
-        'lr_step_size': 30,
-        'lr_gamma': 0.1,
+        'lr_step_size': config.get('lr_step_size', 30),
+        'lr_gamma': config.get('lr_gamma', 0.1),
+        'lr_scheduler': config.get('lr_scheduler', 'step'),
+        'num_epochs': config['num_epochs'],
+        'max_grad_norm': config.get('max_grad_norm', 0.1),
         'output_dir': config['output_dir'],
         'save_every': config['save_every']
     }

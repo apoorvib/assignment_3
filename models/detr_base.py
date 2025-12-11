@@ -33,16 +33,31 @@ class DETRBase(nn.Module):
         # HuggingFace DETR uses eos_coefficient in the config
         if hasattr(self.detr.config, 'eos_coefficient'):
             self.detr.config.eos_coefficient = eos_coef
+            print(f"Set eos_coefficient in config to {eos_coef}")
+        
         # Also try setting it directly in the model if available
         if hasattr(self.detr, 'eos_coef'):
             self.detr.eos_coef = eos_coef
+            print(f"Set eos_coef in model to {eos_coef}")
+        
         # Set in loss computation module if it exists
         if hasattr(self.detr, 'loss') and hasattr(self.detr.loss, 'eos_coef'):
             self.detr.loss.eos_coef = eos_coef
+            print(f"Set eos_coef in loss module to {eos_coef}")
+        
         # Try to find and set in any nested loss modules
         for name, module in self.detr.named_modules():
             if hasattr(module, 'eos_coef'):
                 module.eos_coef = eos_coef
+                print(f"Set eos_coef in {name} to {eos_coef}")
+        
+        # Also check for loss_weights in config
+        if hasattr(self.detr.config, 'loss_weights'):
+            if self.detr.config.loss_weights is None:
+                self.detr.config.loss_weights = {}
+            # Ensure classification loss weight is set
+            if 'loss_class_error' not in self.detr.config.loss_weights:
+                self.detr.config.loss_weights['loss_class_error'] = 1.0
         
         self.num_classes = num_classes
         self.processor = DetrImageProcessor.from_pretrained(pretrained_model)
