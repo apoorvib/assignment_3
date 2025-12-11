@@ -36,7 +36,14 @@ class DETRPixelDiff(DETRBase):
         # If using concat, need to adjust input channels
         if diff_mode == 'concat':
             # Replace first conv layer to accept 6 channels (3+3)
-            old_conv = self.detr.model.backbone.conv_encoder.model.conv1
+            try:
+                old_conv = self.detr.model.backbone.conv_encoder.model.conv1
+            except AttributeError as e:
+                raise AttributeError(
+                    f"Could not access conv1 layer. DETR backbone structure may have changed. "
+                    f"Original error: {e}"
+                )
+            
             new_conv = nn.Conv2d(
                 6, old_conv.out_channels,
                 kernel_size=old_conv.kernel_size,
@@ -44,13 +51,14 @@ class DETRPixelDiff(DETRBase):
                 padding=old_conv.padding,
                 bias=old_conv.bias is not None
             )
-            # Initialize with pretrained weights (average the 3 channels)
+            # Initialize with pretrained weights (replicate the 3 channels for both input images)
             with torch.no_grad():
-                new_conv.weight[:, :3] = old_conv.weight
-                new_conv.weight[:, 3:] = old_conv.weight
-                new_conv.weight = new_conv.weight / 2
+                # Copy weights: first 3 channels from original, last 3 channels also from original
+                new_conv.weight.data[:, :3] = old_conv.weight.data
+                new_conv.weight.data[:, 3:] = old_conv.weight.data
+                new_conv.weight.data = new_conv.weight.data / 2
                 if old_conv.bias is not None:
-                    new_conv.bias = old_conv.bias
+                    new_conv.bias.data = old_conv.bias.data.clone()
             self.detr.model.backbone.conv_encoder.model.conv1 = new_conv
     
     def compute_diff(self, img1, img2):
@@ -64,6 +72,13 @@ class DETRPixelDiff(DETRBase):
         Returns:
             Difference tensor
         """
+        # Validate input shapes
+        if img1.shape != img2.shape:
+            raise ValueError(
+                f"Image shapes must match for pixel difference computation. "
+                f"Got img1: {img1.shape}, img2: {img2.shape}"
+            )
+        
         if self.diff_mode == 'subtract':
             return img2 - img1
         elif self.diff_mode == 'abs':

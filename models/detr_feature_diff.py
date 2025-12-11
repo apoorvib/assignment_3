@@ -248,8 +248,8 @@ class DETRFeatureDiff(nn.Module):
         encoder_outputs = self.encoder(
             inputs_embeds=feat_diff_flat,
             object_queries=position_embeddings,
-            attention_mask=pixel_mask,
-            output_attentions=False,
+                attention_mask=pixel_mask,
+                output_attentions=False,
             output_hidden_states=False,
             return_dict=True
         )

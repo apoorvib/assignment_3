@@ -7,9 +7,10 @@ import torchvision.transforms as transforms
 import torchvision.models as models
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics.pairwise import cosine_distances
+from utils import get_device
 
 # Load ResNet model for feature extraction
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = get_device()
 resnet = models.resnet18(pretrained=True)
 resnet = torch.nn.Sequential(*list(resnet.children())[:-1])  # Remove FC layer
 resnet.eval().to(device)
