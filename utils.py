@@ -59,5 +59,14 @@ def split_data(index_file, train_ratio=0.8, output_dir='.'):
 
 def get_device():
     """Get the appropriate device (CUDA if available, else CPU)."""
-    return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+        print(f"GPU detected: {torch.cuda.get_device_name(0)}")
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"Number of GPUs: {torch.cuda.device_count()}")
+    else:
+        device = torch.device('cpu')
+        print("WARNING: No GPU detected. Training will be very slow on CPU.")
+        print("Make sure you're running on a GPU node and CUDA is properly installed.")
+    return device
 
