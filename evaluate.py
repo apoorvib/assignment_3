@@ -215,16 +215,33 @@ def main():
     )
     
     # Print results
-    print("\n" + "="*50)
+    print("\n" + "="*60)
     print("EVALUATION RESULTS")
-    print("="*50)
+    print("="*60)
+    print(f"Model: {args.model_path}")
+    print(f"Architecture: Option {args.architecture} ({'Feature Diff' if args.architecture == 1 else 'Pixel Diff'})")
+    print(f"IoU Threshold: {args.iou_threshold}")
+    print(f"Score Threshold: {args.score_threshold}")
+    print(f"Test Samples: {len(test_dataset)}")
+    print("\n" + "-"*60)
+    print("OVERALL METRICS")
+    print("-"*60)
     print(f"Precision: {metrics['precision']:.4f}")
     print(f"Recall: {metrics['recall']:.4f}")
     print(f"mAP: {metrics['mAP']:.4f}")
     print(f"F1 Score: {metrics['f1_score']:.4f}")
-    print("\nPer-class metrics:")
-    for label, pr in metrics['per_class_precision_recall'].items():
-        print(f"  Class {label}: Precision={pr['precision']:.4f}, Recall={pr['recall']:.4f}")
+    print("\n" + "-"*60)
+    print("PER-CLASS METRICS")
+    print("-"*60)
+    for label in sorted(metrics['per_class_precision_recall'].keys()):
+        pr = metrics['per_class_precision_recall'][label]
+        ap = metrics['per_class_AP'].get(label, 0.0)
+        class_names = {0: 'Unknown', 1: 'Person', 2: 'Car', 3: 'Other Vehicle', 4: 'Other Object', 5: 'Bike'}
+        class_name = class_names.get(label, f'Class {label}')
+        print(f"  {class_name} (Class {label}):")
+        print(f"    Precision: {pr['precision']:.4f}, Recall: {pr['recall']:.4f}, AP: {ap:.4f}")
+        print(f"    TP: {pr['tp']}, FP: {pr['fp']}, FN: {pr['fn']}")
+    print("="*60)
     
     # Save results
     results_file = os.path.join(args.output_dir, 'results.json')
