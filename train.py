@@ -48,6 +48,8 @@ def parse_args():
     parser.add_argument('--image_size', type=int, default=800, help='Input image size')
     parser.add_argument('--max_grad_norm', type=float, default=0.1, help='Max gradient norm for clipping')
     parser.add_argument('--lr_scheduler', type=str, default='step', choices=['step', 'cosine'], help='LR scheduler type')
+    parser.add_argument('--lr_step_size', type=int, default=30, help='Step size for StepLR scheduler')
+    parser.add_argument('--lr_gamma', type=float, default=0.1, help='Gamma (decay factor) for StepLR scheduler')
     
     # Other arguments
     parser.add_argument('--output_dir', type=str, default='outputs', help='Output directory')

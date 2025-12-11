@@ -31,19 +31,36 @@ class Trainer:
         self.config = config
         self.device = device
         
-        # Setup optimizer
+        # Setup optimizer with better defaults for DETR
+        # DETR typically benefits from lower learning rates
+        lr = config.get('learning_rate', 1e-4)
+        # If learning rate is too high, the model might not converge
+        if lr > 1e-3:
+            print(f"Warning: Learning rate {lr} might be too high for DETR. Consider using 1e-4 or lower.")
+        
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
-            lr=config.get('learning_rate', 1e-4),
-            weight_decay=config.get('weight_decay', 1e-4)
+            lr=lr,
+            weight_decay=config.get('weight_decay', 1e-4),
+            betas=(0.9, 0.999),
+            eps=1e-8
         )
         
         # Setup learning rate scheduler
-        self.scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optimizer,
-            step_size=config.get('lr_step_size', 30),
-            gamma=config.get('lr_gamma', 0.1)
-        )
+        # Use cosine annealing or step LR
+        lr_scheduler_type = config.get('lr_scheduler', 'step')
+        if lr_scheduler_type == 'cosine':
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer,
+                T_max=config.get('num_epochs', 50),
+                eta_min=1e-6
+            )
+        else:
+            self.scheduler = torch.optim.lr_scheduler.StepLR(
+                self.optimizer,
+                step_size=config.get('lr_step_size', 30),
+                gamma=config.get('lr_gamma', 0.1)
+            )
         
         # Loss function (DETR uses its own loss)
         # We'll use the loss from the model's forward pass
@@ -238,8 +255,9 @@ class Trainer:
             # Backward pass
             loss.backward()
             
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.1)
+            # Gradient clipping - DETR benefits from gradient clipping
+            # Increase max_norm slightly to allow more learning
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=config.get('max_grad_norm', 0.1))
             
             self.optimizer.step()
             
