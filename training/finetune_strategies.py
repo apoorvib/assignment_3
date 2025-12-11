@@ -97,7 +97,8 @@ def get_trainable_parameters(model, strategy, architecture_option=2):
                     trainable_params.append(param)
     
     elif strategy == FineTuneStrategy.TRANSFORMER_ONLY:
-        # Only fine-tune transformer block
+        # Only fine-tune transformer block and prediction heads
+        # (heads must be trainable for gradient flow)
         if hasattr(model, 'transformer'):
             for param in model.transformer.parameters():
                 param.requires_grad = True
@@ -116,6 +117,27 @@ def get_trainable_parameters(model, strategy, architecture_option=2):
         elif hasattr(model, 'detr'):
             if hasattr(model.detr.model, 'position_embeddings'):
                 for param in model.detr.model.position_embeddings.parameters():
+                    param.requires_grad = True
+                    trainable_params.append(param)
+        
+        # IMPORTANT: Also unfreeze prediction heads (required for gradient flow)
+        if hasattr(model, 'class_labels_classifier'):
+            for param in model.class_labels_classifier.parameters():
+                param.requires_grad = True
+                trainable_params.append(param)
+        elif hasattr(model, 'detr'):
+            if hasattr(model.detr, 'class_labels_classifier'):
+                for param in model.detr.class_labels_classifier.parameters():
+                    param.requires_grad = True
+                    trainable_params.append(param)
+        
+        if hasattr(model, 'bbox_predictor'):
+            for param in model.bbox_predictor.parameters():
+                param.requires_grad = True
+                trainable_params.append(param)
+        elif hasattr(model, 'detr'):
+            if hasattr(model.detr, 'bbox_predictor'):
+                for param in model.detr.bbox_predictor.parameters():
                     param.requires_grad = True
                     trainable_params.append(param)
     
