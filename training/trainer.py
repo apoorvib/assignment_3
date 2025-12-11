@@ -257,7 +257,7 @@ class Trainer:
             
             # Gradient clipping - DETR benefits from gradient clipping
             # Increase max_norm slightly to allow more learning
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=config.get('max_grad_norm', 0.1))
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.config.get('max_grad_norm', 0.1))
             
             self.optimizer.step()
             
