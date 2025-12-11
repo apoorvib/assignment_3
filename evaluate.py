@@ -33,6 +33,10 @@ def parse_args():
     parser.add_argument('--pretrained_model', type=str, default='facebook/detr-resnet-50',
                        help='Pretrained DETR model')
     parser.add_argument('--image_size', type=int, default=800, help='Input image size')
+    parser.add_argument('--diff_amplify', type=float, default=1.0,
+                       help='Multiplier for pixel difference (must match training, default: 1.0)')
+    parser.add_argument('--eos_coef', type=float, default=0.01,
+                       help='Background class weight (must match training, default: 0.01)')
     
     # Evaluation arguments
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
@@ -141,7 +145,9 @@ def main():
     model = create_model(
         architecture=args.architecture,
         num_classes=args.num_classes,
-        pretrained_model=args.pretrained_model
+        pretrained_model=args.pretrained_model,
+        diff_amplify=args.diff_amplify,
+        eos_coef=args.eos_coef
     )
     
     # Load weights
